@@ -1,4 +1,6 @@
-﻿using Core.Ports;
+﻿using Core.Entities;
+using Core.Ports;
+using Infrastructure.Adapters;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -18,10 +20,21 @@ namespace Api.Controllers
         }
 
         [HttpPost("consume")]
-        public IActionResult StartConsuming([FromBody] string topic)
+        public IActionResult StartConsuming([FromBody] ConsumeRequest request)
         {
-            _logger.LogInformation($"Starting to consume topic: {topic}");
-            _consumer.Consume(topic);
+            _logger.LogInformation($"Starting to consume topic: {request.Topic}");
+            _consumer.Consume(request.Topic);
+            return Ok();
+        }
+
+        [HttpPost("stop")]
+        public IActionResult StopConsuming()
+        {
+            _logger.LogInformation("Stopping consumer.");
+            if (_consumer is KafkaConsumerAdapter consumerAdapter)
+            {
+                consumerAdapter.Stop();
+            }
             return Ok();
         }
     }

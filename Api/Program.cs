@@ -12,8 +12,9 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Register services
-builder.Services.AddSingleton<IProducerPort, KafkaProducerAdapter>(sp => new KafkaProducerAdapter("localhost:9092", sp.GetRequiredService<ILogger<KafkaProducerAdapter>>()));
-builder.Services.AddSingleton<IConsumerPort, KafkaConsumerAdapter>(sp => new KafkaConsumerAdapter("localhost:9092", "test-group", sp.GetRequiredService<ILogger<KafkaConsumerAdapter>>()));
+string bootstrapServers = builder.Environment.IsDevelopment() ? "localhost:9092" : "kafka:29092";
+builder.Services.AddSingleton<IProducerPort, KafkaProducerAdapter>(sp => new KafkaProducerAdapter(bootstrapServers, sp.GetRequiredService<ILogger<KafkaProducerAdapter>>()));
+builder.Services.AddSingleton<IConsumerPort, KafkaConsumerAdapter>(sp => new KafkaConsumerAdapter(bootstrapServers, "test-group", sp.GetRequiredService<ILogger<KafkaConsumerAdapter>>()));
 builder.Services.AddSingleton<MessagingService>();
 
 var app = builder.Build();

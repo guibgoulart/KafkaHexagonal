@@ -1,21 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-using Confluent.Kafka;
+﻿using Confluent.Kafka;
 using Core.Ports;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Threading;
 
 namespace Infrastructure.Adapters
 {
-    public class KafkaConsumerAdapter : IConsumerPort
+    public class KafkaConsumerAdapter : IConsumerPort, IDisposable
     {
         private readonly IConsumer<Ignore, string> _consumer;
         private readonly ILogger<KafkaConsumerAdapter> _logger;
+        private Task _consumerTask;
+        private CancellationTokenSource _cts;
 
         public KafkaConsumerAdapter(string bootstrapServers, string groupId, ILogger<KafkaConsumerAdapter> logger)
         {
@@ -32,21 +26,28 @@ namespace Infrastructure.Adapters
 
         public void Consume(string topic)
         {
-            _consumer.Subscribe(topic);
+            if (_consumerTask != null && !_consumerTask.IsCompleted)
+            {
+                _logger.LogWarning("Consumer is already running.");
+                return;
+            }
 
-            CancellationTokenSource cts = new CancellationTokenSource();
-            Console.CancelKeyPress += (_, e) => {
-                e.Cancel = true;
-                cts.Cancel();
-            };
+            _cts = new CancellationTokenSource();
+            _consumerTask = Task.Run(() => StartConsuming(topic, _cts.Token), _cts.Token);
+        }
+
+        private void StartConsuming(string topic, CancellationToken cancellationToken)
+        {
+            _consumer.Subscribe(topic);
 
             try
             {
-                while (true)
+                while (!cancellationToken.IsCancellationRequested)
                 {
                     try
                     {
-                        var cr = _consumer.Consume(cts.Token);
+                        var cr = _consumer.Consume(cancellationToken);
+                        // Put logic here
                         _logger.LogInformation($"Consumed message '{cr.Value}' from topic {cr.Topic}, partition {cr.Partition}, offset {cr.Offset}");
                     }
                     catch (ConsumeException e)
@@ -57,14 +58,29 @@ namespace Infrastructure.Adapters
             }
             catch (OperationCanceledException)
             {
+                _logger.LogInformation("Consumption canceled.");
+            }
+            finally
+            {
                 _consumer.Close();
+            }
+        }
+
+        public void Stop()
+        {
+            if (_cts != null)
+            {
+                _cts.Cancel();
+                _consumerTask.Wait();
+                _cts.Dispose();
+                _logger.LogInformation("Consumer stopped.");
             }
         }
 
         public void Dispose()
         {
+            Stop();
             _consumer.Dispose();
         }
     }
 }
-
